@@ -21,10 +21,6 @@ args = "telegram_bot"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "News Bot"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "Simple News Bot"
 
 [[workflows.workflow]]
@@ -42,14 +38,6 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pip install python-telegram-bot && python bot.py"
-
-[[workflows.workflow]]
-name = "News Bot"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python news_bot.py"
 
 [[workflows.workflow]]
 name = "Simple News Bot"

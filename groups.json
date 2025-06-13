@@ -1,1 +1,16 @@
-{}
+{
+  "-1002652417429": {
+    "id": -1002652417429,
+    "title": "BOTS TRIAL GROUP",
+    "type": "supergroup",
+    "active": true,
+    "added_date": "2025-06-13 10:55:10.166678"
+  },
+  "-1002671883384": {
+    "id": -1002671883384,
+    "title": "MY CHANNEL'S CONTENT",
+    "type": "supergroup",
+    "active": true,
+    "added_date": "2025-06-13 11:02:53.011995"
+  }
+}

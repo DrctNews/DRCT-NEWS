@@ -8,7 +8,7 @@ from typing import Dict, List
 
 # Bot configuration
 BOT_TOKEN = "7887089972:AAGn8PdS5JaaUZt1KO_tGwOw0yGmdwJ-vIw"
-ADMIN_ID = 958576807
+ADMIN_IDS = [958576807, 5716244784, 6654985327, 6510157572]  # Multiple admins
 GROUPS_FILE = "groups.json"
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
@@ -128,6 +128,17 @@ class TelegramBot:
             
         return self.make_request("sendMessage", params)
     
+    def copy_message(self, chat_id: int, from_chat_id: int, message_id: int, caption: str = None) -> dict:
+        """Copy a message to a chat (without forwarded label)"""
+        params = {
+            "chat_id": chat_id,
+            "from_chat_id": from_chat_id,
+            "message_id": message_id
+        }
+        if caption:
+            params["caption"] = caption
+        return self.make_request("copyMessage", params)
+    
     def forward_message(self, chat_id: int, from_chat_id: int, message_id: int) -> dict:
         """Forward a message to a chat"""
         params = {
@@ -155,7 +166,7 @@ class TelegramBot:
         chat_id = chat["id"]
         
         if chat["type"] == "private":
-            if user["id"] == ADMIN_ID:
+            if user["id"] in ADMIN_IDS:
                 self.send_message(
                     chat_id,
                     "🎯 *Admin Panel*\n\n"
@@ -186,7 +197,7 @@ class TelegramBot:
         user = update["message"]["from"]
         chat_id = update["message"]["chat"]["id"]
         
-        if user["id"] == ADMIN_ID:
+        if user["id"] in ADMIN_IDS:
             help_text = (
                 "🤖 *Admin Help*\n\n"
                 "*Kaise use karein:*\n"
@@ -220,7 +231,7 @@ class TelegramBot:
         user = update["message"]["from"]
         chat_id = update["message"]["chat"]["id"]
         
-        if user["id"] != ADMIN_ID:
+        if user["id"] not in ADMIN_IDS:
             self.send_message(chat_id, "❌ Sirf admin hi yeh command use kar sakte hain.")
             return
         
@@ -229,7 +240,7 @@ class TelegramBot:
             f"🤖 *Bot Status*\n\n"
             f"✅ Bot chal raha hai\n"
             f"📊 Connected groups: {group_count}\n"
-            f"👤 Admin ID: {ADMIN_ID}\n\n"
+            f"👥 Admins: {len(ADMIN_IDS)}\n\n"
             f"Messages broadcast karne ke liye ready!"
         )
         
@@ -240,7 +251,7 @@ class TelegramBot:
         user = update["message"]["from"]
         chat_id = update["message"]["chat"]["id"]
         
-        if user["id"] != ADMIN_ID:
+        if user["id"] not in ADMIN_IDS:
             self.send_message(chat_id, "❌ Sirf admin hi yeh command use kar sakte hain.")
             return
         
@@ -264,13 +275,14 @@ class TelegramBot:
                     )
                     logger.info(f"Bot added to group: {chat.get('title')} ({chat['id']})")
                     
-                    # Notify admin
+                    # Notify all admins
                     admin_message = f"🎉 *Naya Group Connected!*\n\n"
                     admin_message += f"📝 Name: {chat.get('title', 'Unknown')}\n"
                     admin_message += f"🆔 ID: {chat['id']}\n"
                     admin_message += f"📊 Total Groups: {self.group_manager.get_group_count()}"
                     
-                    self.send_message(ADMIN_ID, admin_message, parse_mode="Markdown")
+                    for admin_id in ADMIN_IDS:
+                        self.send_message(admin_id, admin_message, parse_mode="Markdown")
         
         # Check if bot was removed from group
         if "left_chat_member" in message:
@@ -280,13 +292,14 @@ class TelegramBot:
                 self.group_manager.remove_group(chat["id"])
                 logger.info(f"Bot removed from group: {chat.get('title')} ({chat['id']})")
                 
-                # Notify admin
+                # Notify all admins
                 admin_message = f"❌ *Group Disconnected*\n\n"
                 admin_message += f"📝 Name: {chat.get('title', 'Unknown')}\n"
                 admin_message += f"🆔 ID: {chat['id']}\n"
                 admin_message += f"📊 Total Groups: {self.group_manager.get_group_count()}"
                 
-                self.send_message(ADMIN_ID, admin_message, parse_mode="Markdown")
+                for admin_id in ADMIN_IDS:
+                    self.send_message(admin_id, admin_message, parse_mode="Markdown")
     
     def broadcast_message(self, update: dict):
         """Handle messages from admin and broadcast to all groups"""
@@ -294,8 +307,8 @@ class TelegramBot:
         user = message["from"]
         chat_id = message["chat"]["id"]
         
-        # Only allow admin to broadcast
-        if user["id"] != ADMIN_ID:
+        # Only allow admins to broadcast
+        if user["id"] not in ADMIN_IDS:
             return
         
         # Don't broadcast commands
@@ -325,14 +338,14 @@ class TelegramBot:
         # Broadcast to all active groups
         for group_id in active_groups:
             try:
-                # Forward the message to the group
-                result = self.forward_message(group_id, chat_id, message["message_id"])
+                # Copy the message to the group (without "Forwarded from" label)
+                result = self.copy_message(group_id, chat_id, message["message_id"])
                 if result.get("ok"):
                     success_count += 1
-                    logger.info(f"Message forwarded to group {group_id}")
+                    logger.info(f"Message copied to group {group_id}")
                 else:
                     failed_count += 1
-                    logger.error(f"Failed to forward to group {group_id}: {result}")
+                    logger.error(f"Failed to copy to group {group_id}: {result}")
                     if "chat not found" in str(result).lower() or "bot was blocked" in str(result).lower():
                         self.group_manager.deactivate_group(group_id)
                         
@@ -397,16 +410,17 @@ class TelegramBot:
             bot_info = me_response["result"]
             self.bot_username = bot_info["username"]
             logger.info(f"Bot started: @{bot_info['username']} ({bot_info['first_name']})")
-            logger.info(f"Admin ID: {ADMIN_ID}")
+            logger.info(f"Admin IDs: {ADMIN_IDS}")
             
-            # Send startup notification to admin
+            # Send startup notification to all admins
             startup_msg = f"🤖 *Bot Successfully Started!*\n\n"
             startup_msg += f"🏷️ Username: @{bot_info['username']}\n"
             startup_msg += f"📊 Connected Groups: {self.group_manager.get_group_count()}\n"
-            startup_msg += f"👤 Admin: {ADMIN_ID}\n\n"
+            startup_msg += f"👥 Admins: {len(ADMIN_IDS)}\n\n"
             startup_msg += f"✅ Ready for broadcasting!"
             
-            self.send_message(ADMIN_ID, startup_msg, parse_mode="Markdown")
+            for admin_id in ADMIN_IDS:
+                self.send_message(admin_id, startup_msg, parse_mode="Markdown")
         else:
             logger.error("Failed to get bot info")
             return
