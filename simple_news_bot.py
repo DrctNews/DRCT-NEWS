@@ -6,10 +6,11 @@ import requests
 from datetime import datetime
 from typing import Dict, List
 
+# Import configuration
+from config import BOT_TOKEN, ADMIN_ID, GROUPS_FILE, BOT_USERNAME
+
 # Bot configuration
-BOT_TOKEN = "7887089972:AAGn8PdS5JaaUZt1KO_tGwOw0yGmdwJ-vIw"
-ADMIN_IDS = [958576807, 5716244784, 6654985327, 6510157572]  # Multiple admins
-GROUPS_FILE = "groups.json"
+ADMIN_IDS = [ADMIN_ID, 5716244784, 6654985327, 6510157572]  # Multiple admins including primary
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 # Set up logging
@@ -108,9 +109,12 @@ class TelegramBot:
         """Make a request to Telegram API"""
         url = f"{self.base_url}/{method}"
         try:
-            response = requests.post(url, json=params or {}, timeout=30)
+            response = requests.post(url, json=params or {}, timeout=10)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.Timeout:
+            logger.warning(f"Timeout for {method}, retrying...")
+            return {"ok": False, "error": "timeout"}
         except requests.exceptions.RequestException as e:
             logger.error(f"API request failed: {e}")
             return {"ok": False, "error": str(e)}
@@ -148,7 +152,7 @@ class TelegramBot:
         }
         return self.make_request("forwardMessage", params)
     
-    def get_updates(self, offset: int = None, timeout: int = 30) -> dict:
+    def get_updates(self, offset: int = None, timeout: int = 10) -> dict:
         """Get updates from Telegram"""
         params = {"timeout": timeout}
         if offset:
@@ -412,7 +416,7 @@ class TelegramBot:
             logger.info(f"Bot started: @{bot_info['username']} ({bot_info['first_name']})")
             logger.info(f"Admin IDs: {ADMIN_IDS}")
             
-            # Send startup notification to all admins
+            # Send startup notification to all admins (with error handling)
             startup_msg = f"🤖 *Bot Successfully Started!*\n\n"
             startup_msg += f"🏷️ Username: @{bot_info['username']}\n"
             startup_msg += f"📊 Connected Groups: {self.group_manager.get_group_count()}\n"
@@ -420,7 +424,12 @@ class TelegramBot:
             startup_msg += f"✅ Ready for broadcasting!"
             
             for admin_id in ADMIN_IDS:
-                self.send_message(admin_id, startup_msg, parse_mode="Markdown")
+                try:
+                    result = self.send_message(admin_id, startup_msg, parse_mode="Markdown")
+                    if not result.get("ok"):
+                        logger.warning(f"Failed to send startup message to admin {admin_id}: {result}")
+                except Exception as e:
+                    logger.warning(f"Error sending startup message to admin {admin_id}: {e}")
         else:
             logger.error("Failed to get bot info")
             return
@@ -430,12 +439,17 @@ class TelegramBot:
         while True:
             try:
                 # Get updates
-                updates_response = self.get_updates(offset=self.last_update_id + 1, timeout=30)
+                updates_response = self.get_updates(offset=self.last_update_id + 1, timeout=10)
                 
                 if not updates_response.get("ok"):
-                    logger.error(f"Failed to get updates: {updates_response}")
-                    time.sleep(5)
-                    continue
+                    error = updates_response.get("error", "unknown error")
+                    if "timeout" in error.lower():
+                        # Timeout is normal, just continue
+                        continue
+                    else:
+                        logger.error(f"Failed to get updates: {updates_response}")
+                        time.sleep(5)
+                        continue
                 
                 updates = updates_response.get("result", [])
                 
