@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: drct-news-bot
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python simple_news_bot.py"
+    envVars:
+      - key: BOT_TOKEN
+        value: "your-telegram-bot-token"
+      - key: ADMIN_ID
+        value: "your-admin-id"
+      - key: BOT_USERNAME
+        value: "drctnewsbot"

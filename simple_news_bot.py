@@ -132,6 +132,45 @@ class TelegramBot:
             
         return self.make_request("sendMessage", params)
     
+    def send_photo(self, chat_id: int, photo, caption: str = None, parse_mode: str = None) -> dict:
+        """Send a photo to a chat"""
+        params = {
+            "chat_id": chat_id,
+            "photo": photo
+        }
+        if caption:
+            params["caption"] = caption[:1024]  # Telegram caption limit
+        if parse_mode:
+            params["parse_mode"] = parse_mode
+            
+        return self.make_request("sendPhoto", params)
+    
+    def send_document(self, chat_id: int, document, caption: str = None, parse_mode: str = None) -> dict:
+        """Send a document to a chat"""
+        params = {
+            "chat_id": chat_id,
+            "document": document
+        }
+        if caption:
+            params["caption"] = caption[:1024]
+        if parse_mode:
+            params["parse_mode"] = parse_mode
+            
+        return self.make_request("sendDocument", params)
+    
+    def send_video(self, chat_id: int, video, caption: str = None, parse_mode: str = None) -> dict:
+        """Send a video to a chat"""
+        params = {
+            "chat_id": chat_id,
+            "video": video
+        }
+        if caption:
+            params["caption"] = caption[:1024]
+        if parse_mode:
+            params["parse_mode"] = parse_mode
+            
+        return self.make_request("sendVideo", params)
+    
     def copy_message(self, chat_id: int, from_chat_id: int, message_id: int, caption: str = None) -> dict:
         """Copy a message to a chat (without forwarded label)"""
         params = {
@@ -162,6 +201,66 @@ class TelegramBot:
     def get_me(self) -> dict:
         """Get bot information"""
         return self.make_request("getMe")
+    
+    def send_message_as_bot(self, chat_id: int, message: dict) -> dict:
+        """Send a message as the bot without revealing admin identity"""
+        try:
+            # Handle different message types
+            if "photo" in message:
+                # Photo message
+                largest_photo = max(message["photo"], key=lambda x: x["file_size"])
+                photo_file_id = largest_photo["file_id"]
+                caption = message.get("caption", "")
+                
+                # Add bot signature to caption
+                if caption:
+                    caption = f"{caption}\n\n— DRCT NEWS"
+                else:
+                    caption = "— DRCT NEWS"
+                    
+                return self.send_photo(chat_id, photo_file_id, caption)
+                
+            elif "video" in message:
+                # Video message
+                video_file_id = message["video"]["file_id"]
+                caption = message.get("caption", "")
+                
+                if caption:
+                    caption = f"{caption}\n\n— DRCT NEWS"
+                else:
+                    caption = "— DRCT NEWS"
+                    
+                return self.send_video(chat_id, video_file_id, caption)
+                
+            elif "document" in message:
+                # Document message
+                document_file_id = message["document"]["file_id"]
+                caption = message.get("caption", "")
+                
+                if caption:
+                    caption = f"{caption}\n\n— DRCT NEWS"
+                else:
+                    caption = "— DRCT NEWS"
+                    
+                return self.send_document(chat_id, document_file_id, caption)
+                
+            elif "text" in message:
+                # Text message
+                text = message["text"]
+                text_with_signature = f"{text}\n\n— DRCT NEWS"
+                return self.send_message(chat_id, text_with_signature)
+                
+            else:
+                # For other message types, try to copy but add signature in separate message
+                result = self.copy_message(chat_id, message["chat"]["id"], message["message_id"])
+                if result.get("ok"):
+                    # Send signature as separate message
+                    self.send_message(chat_id, "— DRCT NEWS")
+                return result
+                
+        except Exception as e:
+            logger.error(f"Error sending message as bot: {e}")
+            return {"ok": False, "error": str(e)}
     
     def handle_start_command(self, update: dict):
         """Handle /start command"""
@@ -342,14 +441,13 @@ class TelegramBot:
         # Broadcast to all active groups
         for group_id in active_groups:
             try:
-                # Copy the message to the group (without "Forwarded from" label)
-                result = self.copy_message(group_id, chat_id, message["message_id"])
+                result = self.send_message_as_bot(group_id, message)
                 if result.get("ok"):
                     success_count += 1
-                    logger.info(f"Message copied to group {group_id}")
+                    logger.info(f"Message sent to group {group_id}")
                 else:
                     failed_count += 1
-                    logger.error(f"Failed to copy to group {group_id}: {result}")
+                    logger.error(f"Failed to send to group {group_id}: {result}")
                     if "chat not found" in str(result).lower() or "bot was blocked" in str(result).lower():
                         self.group_manager.deactivate_group(group_id)
                         
