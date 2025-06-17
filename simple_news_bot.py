@@ -1,6 +1,5 @@
 from keep_alive import keep_alive
 keep_alive()
-
 #!/usr/bin/env python3
 import json
 import logging
